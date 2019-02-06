@@ -1,0 +1,157 @@
+{{extend './layouts/frame.art'}}
+{{block 'styles'}}
+<link rel="stylesheet" href="/assets/css/page-cart.css">
+{{/block}}
+{{block 'scripts'}}
+<script type="text/template" id="cartTpl">
+    <br>
+    <div class="sui-msg msg-large msg-block msg-warning">
+        <div class="msg-con">
+            您还没有登录！登录后购物车的商品将保存到您账号中
+            <a href="/login" class="sui-btn btn-xsmall btn-danger">立即登录</a>
+        </div>
+        <s class="msg-icon"></s>
+    </div>
+    <div class="cart-main">
+        <div class="yui3-g cart-th">
+            <div class="yui3-u-1-24"><input type="checkbox" checked></div>
+            <div class="yui3-u-12-24">商品</div>
+            <div class="yui3-u-3-24">单价（元）</div>
+            <div class="yui3-u-3-24">数量</div>
+            <div class="yui3-u-4-24">小计（元）</div>
+            <div class="yui3-u-1-24">操作</div>
+        </div>
+        <div class="cart-item-list">
+            <div class="cart-body">
+                <div class="cart-list">
+                    <? var countAmount = 0 ?>
+                    <? var totalPrice = 0 ?>
+                    <? for(var i=0;i<list.length;i++){ ?>
+                    <? var item = list[i] ?>
+                    <? countAmount += +item.amount ?>
+                    <? totalPrice += item.amount*item.price ?>
+                    <ul class="goods-list yui3-g">
+                        <li class="yui3-u-1-24">
+                            <input data-id="<?=item.id?>" type="checkbox" checked>
+                        </li>
+                        <li class="yui3-u-12-24">
+                            <div class="good-item">
+                                <div class="item-img">
+                                    <img src="<?=item.thumbnail?>">
+                                </div>
+                                <div class="item-msg"><?=item.name?></div>
+                            </div>
+                        </li>
+                        <li class="yui3-u-3-24">
+                            <span class="price">&yen;<?=item.price?></span>
+                        </li>
+                        <li class="yui3-u-3-24">
+                            <a data-id="<?=item.id?>" href="javascript:;" class="increment mins">-</a>
+                            <input autocomplete="off" readonly type="text" value="<?=item.amount?>" class="itxt">
+                            <a data-id="<?=item.id?>" href="javascript:;" class="increment plus">+</a>
+                        </li>
+                        <li class="yui3-u-4-24">
+                            <span class="sum"><?=(item.amount*item.price).toFixed(2)?></span>
+                        </li>
+                        <li class="yui3-u-1-24">
+                            <a href="javascript:;" data-id="<?=item.id?>" class="btn_delete">删除</a>
+                        </li>
+                    </ul>
+                    <? } ?>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="cart-tool">
+        <div class="money-box">
+            <div class="sumprice">
+                <span><strong><?=countAmount?></strong> 件商品</span><br>
+                <span><em>总价（不含运费）：</em><i class="summoney">¥<?=totalPrice.toFixed(2)?></i></span>
+            </div>
+            <div class="sumbtn">
+                <a class="sum-btn" href="javascript:;">生成订单</a>
+            </div>
+        </div>
+    </div>
+</script>
+<script src="/assets/js/template-web.js"></script>
+<script>
+  $(function () {
+    //使用art-template 如果前后端都在同时使用 需要配置不同的解析规则
+    template.defaults.rules[0].test = /<\?(#?)((?:==|=#|[=-])?)[ \t]*([\w\W]*?)[ \t]*(-?)\?>/
+    //1. 获取购物车列表数据 且完成渲染
+    $.get('/cart/list', function (data) { //{list:[]}
+      //缓存  购物车数据
+      window.list = data.list
+      $('.allgoods').html(template('cartTpl', data))
+    })
+    //2. 点击加号减号 修改数量
+    $('.allgoods')
+      .on('click', '.increment', function () {
+        //编辑
+        const id = $(this).data('id')
+        //获取input的值
+        let amount = $(this).siblings('input').val()
+        //区分 操作 是 加 减
+        const isMins = $(this).hasClass('mins')
+        if (isMins) {
+          if (amount < 2) return  //如果数量是1那么阻止操作
+          amount--
+        } else {
+          amount++
+        }
+        //提交给后台
+        $.post('/cart/edit', {id, amount}, function (data) {
+          if (data.success) {
+            //1.修改当前商品数量
+            //2.修改商品总数量
+            //3.修改商品总价格
+            //4.修改商品小计
+            //通过修改 商品列表的数据  重新渲染
+            const cart = list.find(item => item.id == id)
+            cart.amount = amount
+            $('.allgoods').html(template('cartTpl', {list}))
+            alert('修改成功')
+          } else {
+            alert('操作失败，请刷新页面再试！')
+          }
+        })
+      })
+      .on('click', '.btn_delete', function () {
+        //删除
+        const id = this.dataset.id  //H5的api
+        $.post('/cart/remove', {id}, function (data) {
+          if (data.success) {
+            //修改缓存的数据   根据数据去渲染页面
+            const index = list.findIndex(item => item.id == id)
+            list.splice(index, 1)
+            $('.allgoods').html(template('cartTpl', {list}))
+            alert('删除成功')
+          } else {
+            alert('操作失败，请刷新页面再试！')
+          }
+        })
+      })
+      .on('change', '.cart-th [type="checkbox"]', function () {
+        //像  checkbox radio select 使用change事件
+        $('.cart-body [type="checkbox"]').prop('checked', $(this).prop('checked'))
+      })
+      .on('click', '.sum-btn', function () {
+        const $inputs = $('.cart-body [type="checkbox"]:checked')
+        const idArr = []
+        $inputs.each(function (i, item) {
+          //当前的input dom 对象
+          idArr.push(item.dataset.id)
+        })
+        location.href = '/order/create?ids=' + idArr.join(',')
+      })
+  })
+</script>
+{{/block}}
+{{block 'content'}}
+<div class="py-container">
+    <div class="allgoods">
+        <!--TODO 是前端的模版引擎去做-->
+    </div>
+</div>
+{{/block}}
